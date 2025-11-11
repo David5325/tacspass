@@ -16,6 +16,14 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.tacspass.app",
+      "googleServicesFile": "./src/firebase/google-services.json",
+      "permissions": [
+        "USE_FINGERPRINT",
+        "USE_BIOMETRIC",
+        "INTERNET"
+      ],
+
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -24,6 +32,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dbec5eac-385c-450a-ac11-c41d9112b6a7"
+      }
     }
   }
 }
