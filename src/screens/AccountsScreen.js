@@ -25,7 +25,7 @@ import { db, auth } from '../firebase/firebaseConfig';
 import { useMode } from '../context/ModeContext';
 
 export default function AccountsScreen() {
-  const { isRealMode, datosFalsos } = useMode();
+  const { isRealMode, datosFalsos, encrypt, decrypt } = useMode();
   const [cuentasReales, setCuentasReales] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
@@ -45,11 +45,24 @@ export default function AccountsScreen() {
     }
   }, [isRealMode, userId, datosFalsos]);
 
+  // 🔐 Traer y descifrar cuentas reales
   async function fetchCuentasReales() {
     try {
       const q = query(collection(db, 'cuentas'), where('userId', '==', userId));
       const snapshot = await getDocs(q);
-      const cuentas = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const cuentas = await Promise.all(
+        snapshot.docs.map(async (d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            nombre: await decrypt(data.nombre),
+            correo: await decrypt(data.correo),
+            clave: await decrypt(data.clave),
+          };
+        })
+      );
+
       setCuentasReales(cuentas);
     } catch (err) {
       console.error('Error cargando cuentas:', err);
@@ -94,6 +107,7 @@ export default function AccountsScreen() {
     setModalVisible(true);
   };
 
+  // 🔐 Guardar o actualizar con cifrado
   const guardarCuenta = async () => {
     if (!nuevoServicio.trim() || !nuevoCorreo.trim() || !nuevaClave.trim()) {
       Alert.alert('Campos incompletos', 'Por favor llena todos los datos');
@@ -107,30 +121,26 @@ export default function AccountsScreen() {
         return;
       }
 
+      // Cifrar datos antes de guardar (solo modo real)
+      const nombreCifrado = await encrypt(nuevoServicio.trim());
+      const correoCifrado = await encrypt(nuevoCorreo.trim());
+      const claveCifrada = await encrypt(nuevaClave);
+
       if (modoEdicion && cuentaEditando) {
         await updateDoc(doc(db, 'cuentas', cuentaEditando.id), {
-          nombre: nuevoServicio.trim(),
-          correo: nuevoCorreo.trim(),
-          clave: nuevaClave,
+          nombre: nombreCifrado,
+          correo: correoCifrado,
+          clave: claveCifrada,
         });
-        setCuentasReales((prev) =>
-          prev.map((c) =>
-            c.id === cuentaEditando.id
-              ? { ...c, nombre: nuevoServicio.trim(), correo: nuevoCorreo.trim(), clave: nuevaClave }
-              : c
-          )
-        );
+        await fetchCuentasReales();
       } else {
-        const docRef = await addDoc(collection(db, 'cuentas'), {
-          nombre: nuevoServicio.trim(),
-          correo: nuevoCorreo.trim(),
-          clave: nuevaClave,
+        await addDoc(collection(db, 'cuentas'), {
+          nombre: nombreCifrado,
+          correo: correoCifrado,
+          clave: claveCifrada,
           userId: user.uid,
         });
-        setCuentasReales((prev) => [
-          ...prev,
-          { id: docRef.id, nombre: nuevoServicio.trim(), correo: nuevoCorreo.trim(), clave: nuevaClave },
-        ]);
+        await fetchCuentasReales();
       }
 
       setModalVisible(false);
@@ -147,26 +157,22 @@ export default function AccountsScreen() {
 
   async function eliminarCuenta(id) {
     if (!isRealMode) return;
-    Alert.alert(
-      'Confirmar eliminación',
-      '¿Estás seguro de que deseas eliminar esta cuenta?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, 'cuentas', id));
-              await fetchCuentasReales();
-              Alert.alert('Eliminado', 'La cuenta fue eliminada correctamente');
-            } catch {
-              Alert.alert('Error', 'No se pudo eliminar la cuenta');
-            }
-          },
+    Alert.alert('Confirmar eliminación', '¿Estás seguro de eliminar esta cuenta?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, 'cuentas', id));
+            await fetchCuentasReales();
+            Alert.alert('Eliminado', 'La cuenta fue eliminada correctamente');
+          } catch {
+            Alert.alert('Error', 'No se pudo eliminar la cuenta');
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   const cuentas = isRealMode
@@ -174,72 +180,74 @@ export default function AccountsScreen() {
     : datosFalsos.map((c, index) => ({ ...c, id: `falsa-${index}` }));
 
   const renderItem = ({ item }) => {
-  const visible = visibilidad[item.id] || false;
+    const visible = visibilidad[item.id] || false;
 
-  return (
-    <View style={styles.card}>
-      <Text style={styles.label}>{item.nombre}</Text>
+    return (
+      <View style={styles.card}>
+        <Text style={styles.label}>{item.nombre}</Text>
 
-      <View style={styles.infoRow}>
-        <Text style={{ flex: 1 }}>
-          Correo: {visible ? item.correo : ocultarTexto(item.correo)}
-        </Text>
-        <TouchableOpacity onPress={() => toggleVisibilidad(item.id)}>
-          <Ionicons
-            name={visible ? 'eye-off-outline' : 'eye-outline'}
-            size={18}
-            color="black"
-            style={{ marginHorizontal: 5 }}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => copiarAlPortapapeles(item.correo, 'Correo')}>
-          <Ionicons
-            name="copy-outline"
-            size={18}
-            color="black"
-            style={{ marginHorizontal: 5 }}
-          />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.infoRow}>
-        <Text style={{ flex: 1 }}>
-          Contraseña: {visible ? item.clave : ocultarTexto(item.clave)}
-        </Text>
-        <TouchableOpacity onPress={() => toggleVisibilidad(item.id)}>
-          <Ionicons
-            name={visible ? 'eye-off-outline' : 'eye-outline'}
-            size={18}
-            color="black"
-            style={{ marginHorizontal: 5 }}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => copiarAlPortapapeles(item.clave, 'Contraseña')}>
-          <Ionicons
-            name="copy-outline"
-            size={18}
-            color="black"
-            style={{ marginHorizontal: 5 }}
-          />
-        </TouchableOpacity>
-      </View>
-
-      {isRealMode && (
-        <View style={styles.iconRow}>
-          <TouchableOpacity onPress={() => abrirModal(item)}>
-            <Ionicons name="create-outline" size={20} color="#276ef1" />
+        <View style={styles.infoRow}>
+          <Text style={{ flex: 1 }}>
+            Correo: {visible ? item.correo : ocultarTexto(item.correo)}
+          </Text>
+          <TouchableOpacity onPress={() => toggleVisibilidad(item.id)}>
+            <Ionicons
+              name={visible ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color="black"
+              style={{ marginHorizontal: 5 }}
+            />
           </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => eliminarCuenta(item.id, item.nombre)}>
-            <Ionicons name="trash-outline" size={20} color="red" />
+          <TouchableOpacity
+            onPress={() => copiarAlPortapapeles(item.correo, 'Correo')}
+          >
+            <Ionicons
+              name="copy-outline"
+              size={18}
+              color="black"
+              style={{ marginHorizontal: 5 }}
+            />
           </TouchableOpacity>
         </View>
-      )}
-    </View>
-  );
-};
 
+        <View style={styles.infoRow}>
+          <Text style={{ flex: 1 }}>
+            Contraseña: {visible ? item.clave : ocultarTexto(item.clave)}
+          </Text>
+          <TouchableOpacity onPress={() => toggleVisibilidad(item.id)}>
+            <Ionicons
+              name={visible ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color="black"
+              style={{ marginHorizontal: 5 }}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => copiarAlPortapapeles(item.clave, 'Contraseña')}
+          >
+            <Ionicons
+              name="copy-outline"
+              size={18}
+              color="black"
+              style={{ marginHorizontal: 5 }}
+            />
+          </TouchableOpacity>
+        </View>
 
+        {isRealMode && (
+          <View style={styles.iconRow}>
+            <TouchableOpacity onPress={() => abrirModal(item)}>
+              <Ionicons name="create-outline" size={20} color="#276ef1" />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => eliminarCuenta(item.id)}>
+              <Ionicons name="trash-outline" size={20} color="red" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -252,13 +260,30 @@ export default function AccountsScreen() {
         </TouchableOpacity>
       )}
 
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalVisible(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>{modoEdicion ? 'Editar cuenta' : 'Nueva cuenta'}</Text>
+            <Text style={styles.modalTitle}>
+              {modoEdicion ? 'Editar cuenta' : 'Nueva cuenta'}
+            </Text>
 
-            <TextInput style={styles.input} placeholder="Ejemplo: Facebook" value={nuevoServicio} onChangeText={setNuevoServicio} />
-            <TextInput style={styles.input} placeholder="Ejemplo: usuario@gmail.com" value={nuevoCorreo} onChangeText={setNuevoCorreo} />
+            <TextInput
+              style={styles.input}
+              placeholder="Ejemplo: Facebook"
+              value={nuevoServicio}
+              onChangeText={setNuevoServicio}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Ejemplo: usuario@gmail.com"
+              value={nuevoCorreo}
+              onChangeText={setNuevoCorreo}
+            />
 
             <View style={styles.passwordRow}>
               <TextInput
@@ -269,16 +294,28 @@ export default function AccountsScreen() {
                 secureTextEntry={!mostrarClave}
               />
               <TouchableOpacity onPress={() => setMostrarClave((s) => !s)}>
-                <Ionicons name={mostrarClave ? 'eye-off-outline' : 'eye-outline'} size={22} color="#555" />
+                <Ionicons
+                  name={mostrarClave ? 'eye-off-outline' : 'eye-outline'}
+                  size={22}
+                  color="#555"
+                />
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={[styles.button, styles.cancelBtn]} onPress={() => setModalVisible(false)}>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelBtn]}
+                onPress={() => setModalVisible(false)}
+              >
                 <Text style={styles.buttonText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.saveBtn]} onPress={guardarCuenta}>
-                <Text style={styles.buttonText}>{modoEdicion ? 'Actualizar' : 'Guardar'}</Text>
+              <TouchableOpacity
+                style={[styles.button, styles.saveBtn]}
+                onPress={guardarCuenta}
+              >
+                <Text style={styles.buttonText}>
+                  {modoEdicion ? 'Actualizar' : 'Guardar'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -299,7 +336,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   label: { fontSize: 18, fontWeight: 'bold', color: '#2c3e50', marginBottom: 8 },
-  infoText: { flex: 1, fontSize: 16, color: '#333' },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
   iconRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 20 },
   fab: {

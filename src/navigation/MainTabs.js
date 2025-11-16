@@ -29,15 +29,15 @@ export default function MainTabs() {
 
   return (
     <Tab.Navigator
-      initialRouteName="Rutas"
+      initialRouteName="Direcciónes"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
           let iconName;
           switch (route.name) {
-            case 'Rutas': iconName = 'shield-checkmark'; break;
+            case 'Direcciónes': iconName = 'shield-checkmark'; break;
             case 'Generador': iconName = 'key'; break;
             case 'Cuentas': iconName = 'mail'; break;
-            case 'Tarjetas': iconName = 'card'; break;
+            case 'Tarjetas bancarias': iconName = 'card'; break;
             case 'Ajustes': iconName = 'settings'; break;
             default: iconName = 'help';
           }
@@ -48,10 +48,10 @@ export default function MainTabs() {
         tabBarInactiveTintColor: 'gray',
       })}
     >
-      <Tab.Screen name="Rutas" component={withBanner(SecurityScreen)} />
+      <Tab.Screen name="Direcciónes" component={withBanner(SecurityScreen)} />
       <Tab.Screen name="Generador" component={withBanner(GeneratorScreen)} />
       <Tab.Screen name="Cuentas" component={withBanner(AccountsScreen)} />
-      <Tab.Screen name="Tarjetas" component={withBanner(PaymentsScreen)} />
+      <Tab.Screen name="Tarjetas bancarias" component={withBanner(PaymentsScreen)} />
       <Tab.Screen name="Ajustes" component={withBanner(SettingsScreen)} />
     </Tab.Navigator>
   );

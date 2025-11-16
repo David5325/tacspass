@@ -13,7 +13,8 @@ export default function PaymentsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [tarjetaActual, setTarjetaActual] = useState({ id: '', banco: '', numero: '', cvv: '', fecha: '' });
-  const { isRealMode } = useMode();
+  const { isRealMode, encrypt, decrypt } = useMode();
+
 
   useEffect(() => {
     if (isRealMode) cargarTarjetasReales();
@@ -24,11 +25,28 @@ export default function PaymentsScreen() {
     try {
       const q = query(collection(db, 'tarjetas'), where('uid', '==', auth.currentUser.uid));
       const snap = await getDocs(q);
-      setTarjetas(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+      const tarjetasDescifradas = [];
+
+      for (const d of snap.docs) {
+        const data = d.data();
+
+        tarjetasDescifradas.push({
+          id: d.id,
+          banco: await decrypt(data.banco),
+          numero: await decrypt(data.numero),
+          cvv: await decrypt(data.cvv),
+          fecha: await decrypt(data.fecha),
+        });
+      }
+
+      setTarjetas(tarjetasDescifradas);
     } catch {
       Alert.alert('Error', 'No se pudieron cargar las tarjetas');
     }
   };
+
+
 
   const validarTarjeta = () => {
     const { banco, numero, cvv, fecha } = tarjetaActual;
@@ -57,13 +75,26 @@ export default function PaymentsScreen() {
     const { banco, numero, cvv, fecha } = tarjetaActual;
 
     try {
-      if (modoEdicion) {
-        await updateDoc(doc(db, 'tarjetas', tarjetaActual.id), { banco, numero, cvv, fecha });
+      let dataParaGuardar;
+
+      if (isRealMode) {
+        dataParaGuardar = {
+          banco: await encrypt(banco),
+          numero: await encrypt(numero),
+          cvv: await encrypt(cvv),
+          fecha: await encrypt(fecha),
+          uid: auth.currentUser.uid,
+        };
       } else {
-        await addDoc(collection(db, 'tarjetas'), {
-          banco, numero, cvv, fecha, uid: auth.currentUser.uid,
-        });
+        dataParaGuardar = { banco, numero, cvv, fecha, uid: auth.currentUser.uid };
       }
+
+      if (modoEdicion) {
+        await updateDoc(doc(db, 'tarjetas', tarjetaActual.id), dataParaGuardar);
+      } else {
+        await addDoc(collection(db, 'tarjetas'), dataParaGuardar);
+      }
+
       setModalVisible(false);
       setTarjetaActual({ id: '', banco: '', numero: '', cvv: '', fecha: '' });
       cargarTarjetasReales();
@@ -100,7 +131,7 @@ export default function PaymentsScreen() {
       Alert.alert('Copiado', 'Número copiado al portapapeles');
     } catch {
       Alert.alert('Error', 'No se pudo copiar');
-    }
+      }
   };
 
   const toggleVisible = (id, campo) => {
