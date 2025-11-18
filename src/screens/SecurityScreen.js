@@ -26,10 +26,14 @@ import {
   where,
 } from "firebase/firestore";
 import { generarDireccionesFalsas } from "../utils/fakeAddressGenerator";
+import { encryptData, decryptData } from "../utils/encryption"; // Importar directamente
 
 const LETRAS = ["", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))];
 const TIPOS = ["Calle", "Carrera", "Avenida", "Transversal", "Diagonal"];
 const COMPLEMENTOS = ["", "Norte", "Sur", "Oriente", "Occidente"];
+
+// Clave de encriptación (debe ser la misma que en otros componentes)
+const MASTER_KEY = "tu-clave-secreta-de-32-caracteres-aqui!";
 
 function formatearDireccion(p) {
   const letra1 = p.letra1 ? ` ${p.letra1}` : "";
@@ -75,9 +79,32 @@ export default function SecurityScreen() {
     try {
       const q = query(collection(db, "direcciones"), where("uid", "==", auth.currentUser.uid));
       const snap = await getDocs(q);
-      const datos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const datos = await Promise.all(
+        snap.docs.map(async (d) => {
+          const data = d.data();
+
+          // Desencriptar todos los campos
+          return {
+            id: d.id,
+            etiqueta: await decryptData(data.etiqueta, MASTER_KEY),
+            tipo: await decryptData(data.tipo, MASTER_KEY),
+            numero1: await decryptData(data.numero1, MASTER_KEY),
+            letra1: await decryptData(data.letra1, MASTER_KEY),
+            numero2: await decryptData(data.numero2, MASTER_KEY),
+            letra2: await decryptData(data.letra2, MASTER_KEY),
+            numero3: await decryptData(data.numero3, MASTER_KEY),
+            complemento: await decryptData(data.complemento, MASTER_KEY),
+            detallesExtra: await decryptData(data.detallesExtra, MASTER_KEY),
+            direccion: await decryptData(data.direccion, MASTER_KEY),
+            uid: data.uid,
+          };
+        })
+      );
+
       setDirecciones(datos);
-    } catch {
+    } catch (error) {
+      console.error("Error cargando direcciones:", error);
       Alert.alert("Error", "No se pudieron cargar las direcciones");
     }
   }
@@ -129,26 +156,37 @@ export default function SecurityScreen() {
   async function guardar() {
     if (!validar()) return;
 
-    const payload = {
-      etiqueta: form.etiqueta.trim(),
-      tipo: form.tipo,
-      numero1: form.numero1.trim(),
-      letra1: form.letra1,
-      numero2: form.numero2.trim(),
-      letra2: form.letra2,
-      numero3: form.numero3.trim(),
-      complemento: form.complemento,
-      detallesExtra: form.detallesExtra.trim(),
-      direccion: formatearDireccion(form),
-      uid: auth.currentUser.uid,
-    };
+    const direccionFormateada = formatearDireccion(form);
 
     try {
-      if (modoEdicion) await updateDoc(doc(db, "direcciones", form.id), payload);
-      else await addDoc(collection(db, "direcciones"), payload);
+      // Encriptar todos los campos antes de guardar
+      const payload = {
+        etiqueta: await encryptData(form.etiqueta.trim(), MASTER_KEY),
+        tipo: await encryptData(form.tipo, MASTER_KEY),
+        numero1: await encryptData(form.numero1.trim(), MASTER_KEY),
+        letra1: await encryptData(form.letra1, MASTER_KEY),
+        numero2: await encryptData(form.numero2.trim(), MASTER_KEY),
+        letra2: await encryptData(form.letra2, MASTER_KEY),
+        numero3: await encryptData(form.numero3.trim(), MASTER_KEY),
+        complemento: await encryptData(form.complemento, MASTER_KEY),
+        detallesExtra: await encryptData(form.detallesExtra.trim(), MASTER_KEY),
+        direccion: await encryptData(direccionFormateada, MASTER_KEY),
+        uid: auth.currentUser.uid,
+        fechaActualizacion: new Date().toISOString(),
+      };
+
+      if (modoEdicion) {
+        await updateDoc(doc(db, "direcciones", form.id), payload);
+      } else {
+        payload.fechaCreacion = new Date().toISOString();
+        await addDoc(collection(db, "direcciones"), payload);
+      }
+
       setModalVisible(false);
       await cargarDireccionesReales();
-    } catch {
+      Alert.alert("Éxito", `Dirección ${modoEdicion ? "actualizada" : "guardada"} correctamente`);
+    } catch (error) {
+      console.error("Error guardando dirección:", error);
       Alert.alert("Error", "No se pudo guardar la dirección");
     }
   }
@@ -166,7 +204,8 @@ export default function SecurityScreen() {
             await deleteDoc(doc(db, "direcciones", id));
             await cargarDireccionesReales();
             Alert.alert("Eliminado", "La dirección fue eliminada correctamente");
-          } catch {
+          } catch (error) {
+            console.error("Error eliminando dirección:", error);
             Alert.alert("Error", "No se pudo eliminar la dirección");
           }
         },
@@ -182,7 +221,8 @@ export default function SecurityScreen() {
     try {
       await Clipboard.setStringAsync(direccion);
       Alert.alert("Copiado", "Dirección copiada al portapapeles");
-    } catch {
+    } catch (error) {
+      console.error("Error copiando dirección:", error);
       Alert.alert("Error", "No se pudo copiar");
     }
   }
@@ -220,7 +260,6 @@ export default function SecurityScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Título igual que cuentas (texto solicitado) */}
       <Text style={styles.pageTitle}>Tus direcciones</Text>
 
       <FlatList data={direcciones} keyExtractor={(i) => i.id} renderItem={renderItem} />
@@ -327,7 +366,7 @@ export default function SecurityScreen() {
             style={styles.input}
           />
 
-           <View style={styles.buttonRow}>
+          <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[styles.btn, styles.cancelBtn]}
               onPress={() => setModalVisible(false)}
@@ -336,12 +375,11 @@ export default function SecurityScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-  style={[styles.btn, styles.saveBtn]}
-  onPress={guardar}
->
-  <Text style={styles.btnText}>{modoEdicion ? "Actualizar" : "Guardar"}</Text>
-</TouchableOpacity>
-
+              style={[styles.btn, styles.saveBtn]}
+              onPress={guardar}
+            >
+              <Text style={styles.btnText}>{modoEdicion ? "Actualizar" : "Guardar"}</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </Modal>
@@ -398,14 +436,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 20,
     bottom: 20,
-    backgroundColor: "#4CAF50", 
+    backgroundColor: "#4CAF50",
     padding: 15,
     borderRadius: 30,
     elevation: 6,
     justifyContent: "center",
     alignItems: "center",
   },
-   buttonRow: {
+  buttonRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 20,
@@ -418,10 +456,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   saveBtn: {
-    backgroundColor: "#27ae60", 
+    backgroundColor: "#27ae60",
   },
   cancelBtn: {
-    backgroundColor: "#95a5a6", 
+    backgroundColor: "#95a5a6",
   },
   btnText: {
     color: "#fff",

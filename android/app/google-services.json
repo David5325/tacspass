@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "770386564091",
+    "project_id": "tacspass",
+    "storage_bucket": "tacspass.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:770386564091:android:4fe2119af89d1e9e0c315e",
+        "android_client_info": {
+          "package_name": "com.tacspass.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDz8S4P5F4IP01bU6quRkQPxc0Fs9DyC7s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

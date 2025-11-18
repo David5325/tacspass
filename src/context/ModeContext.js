@@ -24,16 +24,27 @@ export function ModeProvider({ children }) {
     }
   };
 
-  // 🔐 CIFRAR (solo en modo real)
-  const encrypt = (data) => {
+  // 🔐 CIFRAR (solo en modo real) - CON AWAIT
+  const encrypt = async (data) => {
     if (!isRealMode) return data;
-    return encryptData(data, masterKey);
+    try {
+      return await encryptData(data, masterKey);
+    } catch (error) {
+      console.error("Error encriptando:", error);
+      return data; // Fallback: retorna dato sin encriptar
+    }
   };
 
-  // 🔐 DESCIFRAR (solo en modo real)
-  const decrypt = (cipher) => {
-    if (!isRealMode) return null; // ❗ En modo falso NO mostrar cifrado
-    return decryptData(cipher, masterKey);
+  // 🔐 DESCIFRAR (solo en modo real) - CON AWAIT
+  const decrypt = async (cipher) => {
+    if (!isRealMode || !cipher) return cipher;
+    try {
+      const result = await decryptData(cipher, masterKey);
+      return result || cipher; // Si falla la desencriptación, retorna el original
+    } catch (error) {
+      console.error("Error desencriptando:", error);
+      return cipher; // Fallback: retorna el dato cifrado
+    }
   };
 
   return (

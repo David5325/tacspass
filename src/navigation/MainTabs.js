@@ -35,7 +35,7 @@ export default function MainTabs() {
           let iconName;
           switch (route.name) {
             case 'Direcciónes': iconName = 'shield-checkmark'; break;
-            case 'Generador': iconName = 'key'; break;
+            case 'Generador de contraseñas': iconName = 'key'; break;
             case 'Cuentas': iconName = 'mail'; break;
             case 'Tarjetas bancarias': iconName = 'card'; break;
             case 'Ajustes': iconName = 'settings'; break;
@@ -49,7 +49,7 @@ export default function MainTabs() {
       })}
     >
       <Tab.Screen name="Direcciónes" component={withBanner(SecurityScreen)} />
-      <Tab.Screen name="Generador" component={withBanner(GeneratorScreen)} />
+      <Tab.Screen name="Generador de contraseñas" component={withBanner(GeneratorScreen)} />
       <Tab.Screen name="Cuentas" component={withBanner(AccountsScreen)} />
       <Tab.Screen name="Tarjetas bancarias" component={withBanner(PaymentsScreen)} />
       <Tab.Screen name="Ajustes" component={withBanner(SettingsScreen)} />
